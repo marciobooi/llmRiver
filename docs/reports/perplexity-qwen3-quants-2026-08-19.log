@@ -1,0 +1,7 @@
+=== Qwen3-30B-Q4_K_M ===
+Final estimate: PPL = 8.0409 +/- 0.31687
+=== Qwen3-30B-Q3_K_M ===
+Final estimate: PPL = 8.2924 +/- 0.32730
+=== Qwen3-30B-Q2_K ===
+Final estimate: PPL = 8.8034 +/- 0.35599
+ALLDONE

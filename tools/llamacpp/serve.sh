@@ -15,12 +15,32 @@ MODE="${1:-single}"
 
 case "$MODE" in
   single)
-    # 25.7 tok/s — fastest for one user at a time (docs/PLAN.md Step 2,
-    # Attempt 11). Q2_K wins here because batch=1 decode is bandwidth-bound.
+    # 20.8 tok/s. Q3_K_M rather than Q2_K: measured wikitext perplexity is
+    # 8.29 vs Q4_K_M's 8.04 (+3.1%, error bars overlap, i.e. no detectable
+    # quality loss) while Q2_K costs +9.5% with non-overlapping error bars.
+    # Q3_K_M buys most of the speed for none of the measurable quality.
+    MODEL_DIR=~/llmriver/models/qwen3-30b-q3km
+    MODEL_FILE=Qwen3-30B-A3B-Instruct-2507-Q3_K_M.gguf
+    PARALLEL=1
+    CTX=8192
+    ;;
+  fastest)
+    # 25.7 tok/s, the fastest single-user config measured — but +9.5%
+    # perplexity against Q4_K_M, which IS statistically distinguishable.
+    # Use when speed matters more than output quality.
     MODEL_DIR=~/llmriver/models/qwen3-30b-q2k
     MODEL_FILE=Qwen3-30B-A3B-Instruct-2507-Q2_K.gguf
     PARALLEL=1
     CTX=8192
+    ;;
+  longctx)
+    # For prompts beyond ~13K tokens. DeepSeek-V2-Lite (MoE + MLA) measured
+    # fastest at both 4K (12.2 tok/s) and 16K (3.8) because MLA keeps
+    # attention cost down, which is the binding constraint at depth.
+    MODEL_DIR=~/llmriver/models/deepseek-v2-lite
+    MODEL_FILE=DeepSeek-V2-Lite-Chat-Q4_K_M.gguf
+    PARALLEL=1
+    CTX=32768
     ;;
   serving)
     # 45.5 tok/s aggregate across 16 concurrent requests. Q4_K_M rather than
@@ -33,7 +53,7 @@ case "$MODE" in
     CTX=65536
     ;;
   *)
-    echo "usage: $0 [single|serving]" >&2
+    echo "usage: $0 [single|fastest|longctx|serving]" >&2
     exit 1
     ;;
 esac

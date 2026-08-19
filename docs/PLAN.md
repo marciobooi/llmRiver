@@ -615,6 +615,50 @@ parameter count, density, layer count and training, not only in
 attention scheme. The degradation *slopes* are the meaningful signal;
 the absolute values confound several variables.
 
+**Attempt 19 — quality measured, and it changes the recommendation.**
+Every prior attempt ranked on speed alone. Wikitext-2 perplexity,
+`llama-perplexity --chunks 20`, same model family so the tokenizer is
+constant (perplexity is *not* comparable across model families):
+
+| quant | perplexity | vs Q4_K_M | decode tok/s |
+|---|---|---|---|
+| Q4_K_M | 8.041 +/- 0.317 | — | 18.66 |
+| **Q3_K_M** | 8.292 +/- 0.327 | +3.1% | 20.8 |
+| Q2_K | 8.803 +/- 0.356 | +9.5% | 25.7 |
+
+Reading the error bars rather than the point estimates: Q3_K_M's
+[7.96, 8.62] **overlaps** Q4_K_M's [7.72, 8.36], so at this sample size
+its quality loss is not detectable. Q2_K's [8.44, 9.16] does **not**
+overlap, so its degradation is real.
+
+**This revises Attempt 2 and the serve.sh default.** Q2_K was previously
+recommended as the single-user config on speed alone; Q3_K_M is the
+better default — +11.5% speed for no measurable quality cost, versus
+Q2_K's +38% for a measurable one. `serve.sh` now defaults to Q3_K_M with
+Q2_K available as an explicit `fastest` mode.
+
+Caveat: wikitext perplexity is a crude proxy for instruct-model task
+quality, and 20 chunks is a small sample (hence the wide intervals).
+It is enough to separate Q2_K from Q4_K_M and not enough to separate
+Q3_K_M from Q4_K_M — which is exactly what is claimed above, no more.
+
+**Attempt 20 — serve.sh verified end to end.** Previously shipped
+untested. Now launched, health-checked, and given a real
+`/v1/chat/completions` request through the OpenAI-compatible API; it
+returned a correct answer, and the container was removed afterwards.
+Modes: `single` (Q3_K_M), `fastest` (Q2_K), `longctx` (DeepSeek-V2-Lite
++ MLA), `serving` (Q4_K_M, 16 parallel).
+
+**Attempt 21 — findings codified into the profiler.**
+`tools/roofline` now emits a "Model selection guidance" section deriving,
+from the machine's own measured bandwidth, the predicted batch=1 decode
+ceiling per byte-per-token budget, plus the empirical rules established
+here (physical-core thread count, do not quantize KV, do not pair
+speculation with MoE, quantization inverts with batch size, long context
+wants MLA/sliding-window). This is §I.5's "measurement and control
+layer" doing the job it was proposed for: deciding what to run from
+measurements rather than assumption.
+
 ## Step 2 — net conclusion
 
 The broader goal (beat the baseline by >20% using ideas this project's

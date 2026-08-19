@@ -30,4 +30,12 @@ void write_json(std::ostream& out, const Report& report);
 // document (what each number is supposed to tell you).
 void write_human(std::ostream& out, const Report& report);
 
+// Turns the measured matrix into concrete model-selection guidance: what
+// decode speed this machine can support for a given bytes-per-token, plus
+// the rules that were established empirically on this hardware class (see
+// docs/reports/architecture-comparison-2026-08-19.md). This is the
+// "measurement and control layer" of the analysis §I.5 — the part that is
+// supposed to decide what to run instead of guessing.
+void write_guidance(std::ostream& out, const Report& report);
+
 }  // namespace roofline

@@ -147,6 +147,7 @@ int main(int argc, char** argv) {
     roofline::write_json(std::cout, report);
   } else {
     roofline::write_human(std::cout, report);
+    roofline::write_guidance(std::cout, report);
   }
 
   return 0;

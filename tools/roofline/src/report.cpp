@@ -262,4 +262,47 @@ void write_human(std::ostream& out, const Report& report) {
   }
 }
 
+void write_guidance(std::ostream& out, const Report& report) {
+  out << "\n=== Model selection guidance (§I.5 control layer) ===\n";
+  if (!report.ram || report.ram->read_saturation_gbs <= 0) {
+    out << "  needs the 'ram' bench to have run.\n";
+    return;
+  }
+
+  // Batch-1 decode reads every weight the token touches, exactly once, with
+  // no reuse (§III.2). So the ceiling is simply bandwidth / bytes-per-token,
+  // and on mercury-hetzner llama.cpp measured within 3% of it — this
+  // estimate is tight in practice, not a loose upper bound.
+  const double bw = report.ram->read_saturation_gbs;
+  out << "  sustained read bandwidth: " << bw << " GB/s (at "
+      << report.ram->read_saturation_threads << " threads)\n";
+  out << "  predicted batch=1 decode ceiling:\n";
+  for (double gb : {1.0, 2.0, 4.0, 8.0, 16.0}) {
+    out << "    " << gb << " GB read/token -> " << (bw / gb) << " tok/s\n";
+  }
+  out << "  for 10 tok/s, keep bytes-read-per-token under " << (bw / 10.0)
+      << " GB\n";
+
+  out << "\n  A dense model reads its whole file every token. An MoE reads\n"
+         "  only its active experts -- measure, do not assume: Qwen3-30B-A3B\n"
+         "  measured 2.38 GB/token out of an 18.6 GB file.\n";
+
+  // These are measured, not inferred. Each one cost a benchmark to learn and
+  // several of them invert the usual advice, so they are recorded here rather
+  // than left in a report file nobody re-reads.
+  out << "\n  Rules measured on this hardware class:\n"
+         "   - threads: use PHYSICAL core count; SMT siblings share line-fill\n"
+         "     buffers and cost ~6% on bandwidth-bound decode.\n"
+         "   - do NOT quantize the KV cache: -35% at 4K depth. Long-context\n"
+         "     attention is compute-bound, so dequant costs more than the\n"
+         "     bytes save.\n"
+         "   - do NOT pair speculative decoding with an MoE: verifying N\n"
+         "     draft tokens reads the union of N expert sets, not one set.\n"
+         "   - smaller quantization wins at batch=1 and LOSES when batched;\n"
+         "     the crossover sat between batch 4 and 16.\n"
+         "   - batching saturates ~16 sequences (~3.7x aggregate, dense).\n"
+         "   - long context wants MLA or sliding-window attention; plain\n"
+         "     full-attention MoE decayed -91% from 0 to 16K tokens.\n";
+}
+
 }  // namespace roofline
