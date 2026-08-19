@@ -1,0 +1,15 @@
+=== deepseek-v2-lite-MLA ===
+"n_depth": 0
+"avg_ts": 21.162609
+"n_depth": 4096
+"avg_ts": 12.219617
+"n_depth": 16384
+"avg_ts": 3.759877
+=== muse-glimmer-30b ===
+"n_depth": 0
+"avg_ts": 2.537091
+"n_depth": 4096
+"avg_ts": 2.305806
+"n_depth": 16384
+"avg_ts": 2.116182
+ALLDONE

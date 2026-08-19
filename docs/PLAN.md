@@ -572,6 +572,43 @@ eventually beats a fast start, but it does not rescue absolute
 throughput on this hardware. Long-context CPU inference on a 6-core
 desktop part is not a tuning problem; it is out of budget.
 
+**Attempt 18 — full architecture comparison. MLA wins.** Full writeup:
+[docs/reports/architecture-comparison-2026-08-19.md](reports/architecture-comparison-2026-08-19.md).
+Added DeepSeek-V2-Lite (MoE **+ MLA**) and Meta's Muse Glimmer 30B:
+
+| model | architecture | 0 | 4,096 | 16,384 | decay |
+|---|---|---|---|---|---|
+| Qwen3-30B-A3B Q2_K | MoE, full attn | **26.77** | 10.25 | 2.34 | -91% |
+| **DeepSeek-V2-Lite** | **MoE + MLA** | 21.16 | **12.22** | **3.76** | -82% |
+| Gemma 3 12B | dense, sliding-window | 4.97 | 4.58 | 3.12 | -37% |
+| Muse Glimmer 30B | **dense**, full attn | 2.54 | 2.31 | 2.12 | **-17%** |
+
+**DeepSeek-V2-Lite is fastest at both 4K and 16K** and within 20% of the
+best short-prompt figure. It is the only model tested that attacks both
+bottlenecks: MoE sparsity for weight bandwidth, MLA (low-rank latent KV)
+for attention cost.
+
+Muse Glimmer is the instructive negative: it has the **flattest curve of
+all** (-17%) and is still slowest at every depth, because 44 GB/s /
+2.54 tok/s = 17.3 GB read per token — its entire file, every token. It
+is dense. No attention optimisation compensates for reading everything.
+
+The rule this establishes: a model needs **two independent properties**,
+and most have only one.
+
+| property | fixes | seen in |
+|---|---|---|
+| sparsity (MoE) | short-prompt weight-bandwidth wall | Qwen3-MoE, DeepSeek |
+| cheap attention (MLA / SWA) | long-context attention-compute wall | DeepSeek, Gemma 3 |
+
+Qwen3-MoE has the first only (fast start, worst decay). Gemma 3 has the
+second only (slow start, good decay). Muse Glimmer has neither usefully.
+DeepSeek-V2-Lite has both.
+
+**Quality was not measured** — DeepSeek-V2-Lite is a smaller, older (16B,
+2024) model than Qwen3-30B-A3B (2025), and winning on speed does not
+make it the better answer for any given task.
+
 Note this is a comparison of *architectures as shipped*, not a
 controlled experiment — Gemma 3 12B differs from Qwen3-30B-A3B in
 parameter count, density, layer count and training, not only in
