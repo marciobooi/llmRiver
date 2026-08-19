@@ -1,0 +1,6 @@
+Q4_0 plain                  | Generation: 9.8 t/s
+Q4_0 + spec n3              | Generation: 13.0 t/s
+Q4KM + spec n5              | Generation: 10.8 t/s
+Q4KM + spec n8              | Generation: 9.0 t/s
+Q4KM + spec n12             | Generation: 6.6 t/s
+Q4KM + spec n3 smalldraft   | Generation: 11.4 t/s

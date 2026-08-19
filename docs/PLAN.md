@@ -283,17 +283,136 @@ headroom left on this host** — the 44 GB/s wall is final, and combined
 with the firmware-locked 3.6GHz CPU ceiling (Attempt 5), the hardware is
 fully characterized and fully exploited.
 
+**Attempt 9 — §IV.5 ("speculate wide, width is free") is FALSE on this
+hardware.** The doc argues a 64-candidate tree reads the same weights as
+1 candidate, so width costs nothing and the draft model should be judged
+on diversity rather than accuracy. Measured, single-stream, Q4_K_M +
+0.5B Q8_0 draft, varying `--spec-draft-n-max`:
+
+| draft depth | tok/s |
+|---|---|
+| 3 (default) | **13.1** |
+| 5 | 10.8 |
+| 8 | 9.0 |
+| 12 | 6.6 |
+
+Monotonically worse. Width is *not* free, for two compounding reasons
+this project's own data now explains: (1) a draft of depth N is a batch
+of N+1 at verification time, and Attempt 6 established that batching
+leaves the bandwidth-bound region and saturates against AVX2 FMA
+throughput — so extra width buys compute cost, not free rides; (2)
+acceptance decays with depth (each additional drafted token is
+conditionally less likely to be right), so deep drafts do more work that
+gets thrown away. **§IV.5's premise holds only while bandwidth-bound,
+and speculation itself destroys that condition.** Optimal depth here is
+shallow (3). Also tested: a *faster* draft (0.5B Q4_K_M, 491MB) instead
+of the more accurate one (0.5B Q8_0, 676MB) — 11.4 vs 13.1 tok/s, so
+draft *accuracy* matters more than draft speed, the opposite of §IV.5's
+"judge the draft on diversity, not accuracy".
+
+**Attempt 10 — Q4_0 beats Q4_K_M at batch=1.** 9.8 vs 9.0 tok/s (+9%).
+Q4_0 is both smaller (4.43GB vs 4.68GB) and cheaper to dequantize, so it
+wins on both axes of the roofline simultaneously — consistent with the
+Attempt 7 model. With speculation it ties (13.0 vs 13.1), i.e. once
+speculation moves the workload toward compute-bound the byte advantage
+stops mattering, exactly as predicted.
+
+**Hardware inventory — there is no second compute engine.** Checked
+explicitly for any additional processor or memory pool to offload onto:
+- GPU: only an **ASPEED** VGA controller — the server board's BMC/IPMI
+  management chip. 2D framebuffer, no shaders/OpenCL/Vulkan compute.
+  Unusable for inference.
+- **AMD CCP** (Starship/Matisse Cryptographic Coprocessor): driver
+  loaded but claimed by `kvm_amd`, no `/dev/ccp*` userspace node, and
+  functionally an AES/SHA/RSA engine — it cannot do general MACs.
+- No I/OAT / DSA / DMA offload engine of the kind some Xeons expose,
+  which is the one thing that could plausibly stream weights without
+  consuming per-core load-unit and line-fill-buffer slots (§III.1's real
+  bottleneck).
+
+Conclusion: **this box has exactly one compute engine and one memory
+pool.** Every "offload it somewhere else" idea is closed on this
+hardware. Combined with the firmware-locked clock and fully-populated
+dual-channel RAM at rated speed, the only remaining lever for
+single-stream decode is *bytes required per token* — which is a model
+architecture question, not a systems-tuning question. That motivates
+Attempt 11.
+
+**Attempt 11 — MoE sparsity. The only thing that beat the bandwidth wall
+instead of negotiating with it.** Full writeup:
+[docs/reports/moe-sparsity-the-real-unlock-2026-08-19.md](reports/moe-sparsity-the-real-unlock-2026-08-19.md).
+
+Reasoning that led here: Attempts 5/9 established this box has exactly
+one compute engine and one memory pool, RAM is at rated speed, the clock
+is firmware-locked, and llama.cpp is at ~97% of the bandwidth ceiling.
+In `tok/s = bandwidth / bytes-per-token` the numerator is now fixed and
+maxed, so the only remaining variable is the denominator — bytes per
+token — which is a *model architecture* question, not a systems-tuning
+one. That is §I.3's
+argument ("nao mover bytes que nao sao precisos... ou seja:
+esparsidade") and it had never been tested.
+
+Qwen3-30B-A3B-Instruct-2507 Q4_K_M (30.5B total params, ~3.3B active per
+token, 18.56GB file) vs. the dense Qwen2.5-7B Q4_K_M (7.6B params,
+4.68GB):
+
+| model | decode tok/s | bytes read/token |
+|---|---|---|
+| dense 7B | 9.08 | 4.68 GB |
+| **MoE 30B** | **18.66** | **2.38 GB** (44 GB/s / 18.66) |
+
+**4x the parameters, 2.05x the speed, better model.** ~16GB of its
+weights sit resident in RAM and are never touched on a given token.
+
+Two anti-synergies found, both from one mechanism — MoE's win is
+*per-token* expert sparsity, so anything batching several tokens into
+one pass reads the **union** of their expert sets:
+- **Speculation hurts MoE**: 18.5 -> 13.3 / 11.6 / 10.0 at draft depth
+  2/3/5. Speculative decoding assumes "verify N tokens = same weight
+  reads as 1", which holds for dense models and is false for MoE. (On
+  the dense 7B the same technique *helped*: 9.0 -> 13.1.)
+- **MoE batches worse than dense**: 2.44x scaling to B=16 vs. dense's
+  3.74x, because bytes-per-pass grows with batch instead of staying
+  flat. Its lead narrows from 2.05x (B=1) to 1.34x (B=16) — but it is
+  still fastest at every batch size tested (45.53 tok/s at B=16).
+
+**Attempt 12 — huge pages, finally tested properly, and they do not
+matter for this workload.** Attempt 1 failed because file-backed mmaps
+can't get THP. Fixed both blockers: set THP `enabled=always` system-wide
+(reverted afterward) and used `--no-mmap` so weights land in
+THP-eligible *anonymous* memory. Result: 9.0 -> 9.1 tok/s. Noise.
+
+The explanation matters more than the number, and it is a **critique of
+this project's own Step 1 tool**: `tools/roofline` measured a 14.9%
+huge-page win using a *random pointer-chase*. LLM decode streams weights
+*sequentially*, and sequential access already has near-ideal TLB
+behavior (one miss per 4KB while consuming 4KB of useful work). Huge
+pages help random access; this workload isn't random. **A resistance
+number only transfers if it was measured with the access pattern the
+real workload uses** — the profiler should measure sequential streaming
+explicitly, not just pointer-chase latency. (§III.3.1 calls TLB "a
+barreira mais subestimada"; for *streaming* weight reads on this host,
+it is measurably not a barrier at all.)
+
 ## Step 2 — net conclusion
 
 The broader goal (beat the baseline by >20% using ideas this project's
-own analysis predicts) has been hit three times, by three mechanisms,
-each with a disclosed cost:
+own analysis predicts) has been hit repeatedly. Ranked by size:
 
 | mechanism | gain | cost | regime |
 |---|---|---|---|
-| batching (B=16) | **+274%** (9.08 -> 33.98 agg.) | per-sequence latency collapses to ~2.1 tok/s | serving many users |
-| speculative decoding | +45% technical / +10% creative | second model in RAM; gain is content-dependent | single user |
+| **MoE + batching** | **+402%** (9.08 -> 45.53 agg.) | per-sequence latency; 18.6GB RAM | serving many users |
+| **MoE architecture** | **+105%** (9.08 -> 18.66) | 18.6GB RAM resident; **breaks speculation** | single user |
+| batching (dense, B=16) | +274% (9.08 -> 33.98 agg.) | per-sequence latency collapses to ~2.1 tok/s | serving many users |
+| speculative decoding | +45% technical / +10% creative | second model in RAM; content-dependent; **negative on MoE** | dense, single user |
+| Q4_0 over Q4_K_M | +9% | slight quality loss | single user only |
 | Q3_K_M quantization | +20% | model quality, **and it inverts to -45% when batched** | single user only |
+
+**The headline: a 30B MoE runs 2x faster than a dense 7B, and is a
+better model.** Sparsity was the only technique tested that reduced
+bytes-per-token rather than rearranging or amortizing them — which is
+exactly what §I.3 predicted and what §I.2's bandwidth argument implies
+is the only real escape.
 
 The single most important thing learned: **these are not independent
 knobs, and they do not stack.** Q3_K_M + speculative decoding is worse
