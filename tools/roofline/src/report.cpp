@@ -102,6 +102,9 @@ void write_hugepage(JsonWriter& j, const HugepageBenchResult& r) {
   j.kv("hugepage_latency_ns", r.hugepage_latency_ns);
   j.kv("hugepage_confirmed", r.hugepage_confirmed);
   j.kv("latency_reduction_pct", r.latency_reduction_pct);
+  j.kv("baseline_4k_seq_gbs", r.baseline_4k_seq_gbs);
+  j.kv("hugepage_seq_gbs", r.hugepage_seq_gbs);
+  j.kv("seq_gain_pct", r.seq_gain_pct);
   j.end_object();
 }
 
@@ -248,7 +251,12 @@ void write_human(std::ostream& out, const Report& report) {
       out << "  4K-page latency: " << r.baseline_4k_latency_ns << " ns/hop\n";
       out << "  hugepage-requested latency: " << r.hugepage_latency_ns
           << " ns/hop (confirmed backed by 2MB pages: " << r.hugepage_confirmed << ")\n";
-      out << "  latency reduction: " << r.latency_reduction_pct << "%\n";
+      out << "  latency reduction (random access): " << r.latency_reduction_pct << "%\n";
+      out << "  4K-page sequential: " << r.baseline_4k_seq_gbs << " GB/s\n";
+      out << "  hugepage sequential: " << r.hugepage_seq_gbs << " GB/s\n";
+      out << "  gain (sequential streaming): " << r.seq_gain_pct << "%\n";
+      out << "  ^ LLM weight streaming is sequential; use that number, not the\n"
+             "    random-access one, to predict decode speedup.\n";
       if (!r.note.empty()) out << "  note: " << r.note << "\n";
     }
   }

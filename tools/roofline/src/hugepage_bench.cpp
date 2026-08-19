@@ -33,6 +33,26 @@ double measure_dependent_latency(const ChaseNode* arr, int duration_ms) {
   return static_cast<double>(elapsed) / static_cast<double>(hops);
 }
 
+// Touches one 8-byte word per 64-byte line so every cache line in the
+// footprint is pulled in exactly once per pass, which is the access shape of
+// streaming a weight tensor.
+double measure_sequential_bandwidth(const void* mem, size_t size, int duration_ms) {
+  uint64_t duration_ns = static_cast<uint64_t>(duration_ms) * 1000000ull;
+  const auto* p = static_cast<const uint64_t*>(mem);
+  size_t words = size / sizeof(uint64_t);
+  uint64_t acc = 0;
+  uint64_t bytes = 0;
+  uint64_t start = now_ns();
+  do {
+    for (size_t i = 0; i < words; i += 8) acc += p[i];
+    bytes += size;
+  } while (now_ns() - start < duration_ns);
+  uint64_t elapsed = now_ns() - start;
+  g_sink.fetch_add(acc, std::memory_order_relaxed);
+  if (elapsed == 0) return 0.0;
+  return static_cast<double>(bytes) / static_cast<double>(elapsed);
+}
+
 struct Vma {
   uint64_t start;
   uint64_t end;
@@ -106,6 +126,13 @@ HugepageBenchResult run_hugepage_bench(size_t footprint_bytes, int duration_ms) 
 
   result.baseline_4k_latency_ns = measure_dependent_latency(base_arr, duration_ms);
   result.hugepage_latency_ns = measure_dependent_latency(huge_arr, duration_ms);
+
+  result.baseline_4k_seq_gbs = measure_sequential_bandwidth(base_mem, size, duration_ms);
+  result.hugepage_seq_gbs = measure_sequential_bandwidth(huge_mem, size, duration_ms);
+  if (result.baseline_4k_seq_gbs > 0) {
+    result.seq_gain_pct = (result.hugepage_seq_gbs - result.baseline_4k_seq_gbs) /
+                          result.baseline_4k_seq_gbs * 100.0;
+  }
 
   uint64_t confirmed = confirmed_hugepage_bytes(
       reinterpret_cast<uintptr_t>(huge_mem), reinterpret_cast<uintptr_t>(huge_mem) + size);
