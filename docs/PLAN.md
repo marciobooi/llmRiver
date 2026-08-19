@@ -454,6 +454,71 @@ The benchmarks had run correctly both times. Filter failures that look
 like "no results" rather than "error" are a live hazard for this kind of
 measurement work — check for empty output explicitly.)
 
+**Attempt 15 — KV cache quantization: counterproductive, and it locates
+the real long-context bottleneck.** Attempt 14 showed decode collapsing
+with context depth. The obvious suspect was the KV cache: it is stored
+at **f16 by default** (never quantized, while this project spent all day
+compressing weights to 2 bits), it is dense (no expert sparsity applies
+— every token attends over all prior tokens), and it grows with
+conversation length. Halving its bytes should therefore have helped.
+
+It did the opposite. MoE Q4_K_M, `-ctk/-ctv`:
+
+| KV type | depth 0 | depth 4096 |
+|---|---|---|
+| f16 (default) | 19.66 | **9.12** |
+| q8_0 | 19.56 | 5.95 (**-35%**) |
+| q4_0 | 19.52 | 7.24 (-21%) |
+
+At depth 0 all three are identical (nothing in the cache to read), which
+is the control. At depth 4096 both quantized variants lose badly.
+
+**Conclusion: at long context, attention is compute-bound, not
+bandwidth-bound.** If KV bandwidth were the wall, fewer KV bytes would
+win; instead the on-the-fly dequantization of every cached K and V
+during attention costs more than the bytes saved. This is the same law
+that has governed every result in this document — smaller/compressed
+wins while bandwidth-bound, loses once compute-bound — now confirmed a
+fifth time, in a regime where it inverts the usual advice.
+
+(q8_0 landing worse than q4_0 is non-monotonic and unexplained; likely a
+kernel-maturity difference in the AVX2 dequant paths rather than
+anything fundamental. Both being worse than f16 is the finding.)
+
+This also explains Attempt 14's mechanism concretely: the MoE's 48
+attention layers vs. the dense 7B's 28 cost more *attention compute* per
+token, which is why it degrades with depth roughly twice as fast.
+
+**Practical rule for this host: do not quantize the KV cache.** It saves
+RAM and costs speed. That contradicts the common advice to use `-ctk
+q8_0` for long-context work — advice which is sound on GPUs, where KV
+bandwidth genuinely is the constraint and dequant is nearly free.
+
+### Where to attack next, per the measurements
+
+The bottleneck is regime-dependent, and each regime has a different
+answer:
+
+| regime | bottleneck | what works | what backfires |
+|---|---|---|---|
+| short prompt, batch 1 | weight bandwidth | MoE sparsity, smaller quant | — |
+| batched | compute (FMA) | larger quant (Q4 > Q2), batching to 16 | small quant, speculation on MoE |
+| long context | **attention compute** | ? (see below) | KV quantization, more layers |
+
+For the long-context regime specifically, the levers that follow from
+"attention compute is the wall" are architectural, not tuning:
+- **bounded-cost attention** — sliding-window / local attention caps
+  per-token attention work instead of letting it grow with context.
+- **fewer attention layers** for the same quality, or architectures with
+  cheaper attention math (e.g. MLA-style latent attention).
+- **not** KV compression, which trades the non-binding constraint for
+  the binding one.
+
+None of these are tuning knobs; all require choosing a different model.
+That is the same conclusion Attempt 11 reached for the bandwidth regime,
+arrived at independently: on fully-characterized hardware, the remaining
+wins are in model architecture, not systems tuning.
+
 ## Step 2 — net conclusion
 
 The broader goal (beat the baseline by >20% using ideas this project's

@@ -1,0 +1,16 @@
+=== KV=f16 ===
+"n_depth": 0
+"avg_ts": 19.658820
+"n_depth": 4096
+"avg_ts": 9.122820
+=== KV=q8_0 ===
+"n_depth": 0
+"avg_ts": 19.561939
+"n_depth": 4096
+"avg_ts": 5.947699
+=== KV=q4_0 ===
+"n_depth": 0
+"avg_ts": 19.516097
+"n_depth": 4096
+"avg_ts": 7.235188
+ALLDONE
