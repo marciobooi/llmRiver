@@ -1,0 +1,11 @@
+=== gemma3-12b-SWA ===
+"n_depth": 8192
+"avg_ts": 3.806866
+"n_depth": 16384
+"avg_ts": 3.118245
+=== moe-30b-q2k ===
+"n_depth": 8192
+"avg_ts": 6.253026
+"n_depth": 16384
+"avg_ts": 2.336195
+ALLDONE

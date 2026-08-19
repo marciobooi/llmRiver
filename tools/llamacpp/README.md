@@ -81,6 +81,25 @@ roofline's measured RAM bandwidth predicts for this model size — see
 docs/PLAN.md Step 2 for the full baseline writeup and what would
 actually need to change to beat it.
 
+## Which model to run — depends on your context length
+
+There is no single fastest model here. Measured decode tok/s by KV depth
+(`-t 6 -fa 1`, llama.cpp b10502):
+
+| depth | MoE 30B Q2_K | Gemma 3 12B (sliding-window) |
+|---|---|---|
+| 0 | **26.77** | 4.97 |
+| 4,096 | **10.25** | 4.58 |
+| 8,192 | **6.25** | 3.81 |
+| 16,384 | 2.34 | **3.12** |
+
+- **Short prompts / most chat turns:** MoE 30B Q2_K, by up to 5.4x.
+- **Past ~12-13K tokens of context:** Gemma 3 12B. The MoE decays -91%
+  across this range against Gemma 3's -37%, because expert sparsity does
+  not apply to attention and the MoE carries 48 attention layers.
+- **Past ~16K:** everything on this host is 2-3 tok/s. That is below
+  comfortable interactive speed no matter which model you pick.
+
 ## Running it as an API
 
 `serve.sh` starts the winning config as an OpenAI-compatible HTTP server:

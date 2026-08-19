@@ -547,6 +547,31 @@ steep-but-fast until the curves cross; where they cross is the number
 that decides which model to actually deploy, and is being measured at
 8K/16K.
 
+**Attempt 17 — the crossover, and the recommendation inverts.** Extended
+both curves to 8K and 16K:
+
+| depth | Gemma 3 12B (SWA) | MoE 30B Q2_K | winner |
+|---|---|---|---|
+| 0 | 4.97 | **26.77** | MoE, 5.4x |
+| 4,096 | 4.58 | **10.25** | MoE, 2.2x |
+| 8,192 | 3.81 | **6.25** | MoE, 1.6x |
+| 16,384 | **3.12** | 2.34 | **Gemma 3, 1.3x** |
+
+Full-range degradation: MoE **-91%**, Gemma 3 **-37%**.
+
+**Crossover is ~12-13K tokens.** The model that is 5.4x faster on short
+prompts is *slower* than a model less than half its speed once context
+passes ~13K. There is no single "fastest model" on this host — the
+answer depends on context length, and it inverts within the range of
+ordinary use (a long chat, a RAG prompt, a large file pasted in).
+
+Second, harder conclusion: **at 16K context everything here is slow.**
+2-3 tok/s is below comfortable interactive use regardless of
+architecture. Sliding-window attention changes the *slope*, and slope
+eventually beats a fast start, but it does not rescue absolute
+throughput on this hardware. Long-context CPU inference on a 6-core
+desktop part is not a tuning problem; it is out of budget.
+
 Note this is a comparison of *architectures as shipped*, not a
 controlled experiment — Gemma 3 12B differs from Qwen3-30B-A3B in
 parameter count, density, layer count and training, not only in
