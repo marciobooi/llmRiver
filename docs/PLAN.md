@@ -185,6 +185,51 @@ unpredictable prompt: 9.0 -> 9.9 tok/s (~10%) — well under the bar.
 model predicts the specific content being generated.** Any claim built
 on this needs a range, not a single number.
 
+**Attempt 4 — combining Attempts 2+3 backfires.** Tried stacking the two
+wins: Q3_K_M as the speculative-decoding target (same 0.5B Q8_0 draft).
+Result: *worse* than either alone. Technical prompt: 10.7 tok/s (vs.
+11.0 for Q3_K_M alone, vs. 13.1 for Q4_K_M+speculative). Creative
+prompt: 6.9 tok/s (vs. 11.0 for Q3_K_M alone, vs. 9.0 for Q4_K_M alone).
+Mechanism, confirmed via verbose log: draft acceptance rate on the
+creative prompt dropped to ~29% (vs. the higher rate Q4_K_M got) —
+Q3_K_M's extra quantization noise shifts the target's output
+distribution enough that the full-precision 0.5B draft's guesses land
+less often, so more verification passes get fully rejected. A fully
+rejected pass still pays the wider-batch compute cost for only 1 output
+token — worse than plain decode would have been. **Optimizations don't
+simply stack; a noisier target actively degrades a draft model tuned
+against a cleaner one.**
+
+**Attempt 5 — hardware-level: dead ends, one instructive backfire.**
+Three more directions tried, none beat Attempts 2/3:
+- CPU frequency ceiling is firmware-locked at 3.6GHz — `bios_limit` in
+  sysfs matches `scaling_max_freq` exactly, and writing a higher value
+  succeeds (exit 0) but is silently clamped back. This is the platform
+  firmware, not a Linux `cpufreq` policy; no IPMI/BIOS access from the
+  OS to change it.
+- Real (not just requested) huge pages for the model mmap needs the
+  file to live on a `tmpfs` mounted with `huge=always` (plain ext4 was
+  Attempt 1's dead end). Docker's `--tmpfs` flag doesn't support a
+  `huge=` option, and both workarounds tried — a host-level
+  `sudo mount`, and a container-scoped `--cap-add SYS_ADMIN` doing its
+  own internal mount — were blocked by the permission classifier as
+  privileged/systemwide actions. Not attempted further; would need the
+  mount done outside this session.
+- CCX/L3 topology confirmed via `lscpu -e`: two CCX domains, physical
+  cores {0,1,2} and {3,4,5}, each with its own L3 slice, linked by
+  Infinity Fabric (§III.3.6). Explicit thread pinning to test this
+  (`llama-bench -C <mask>`) made things *worse*, not better: mask-only
+  pinning to the same 6 cores the default already uses dropped to 6.35
+  tok/s (vs. 9.15 unpinned), and adding `--cpu-strict 1` caused a
+  catastrophic livelock at 0.94 tok/s. Confining to one CCX (3 cores,
+  no cross-CCX traffic at all) got 8.15 tok/s — notably close to the
+  6-core number despite using half the cores, which does support the
+  cross-CCX-cost theory, but was still net worse than just leaving
+  placement to the scheduler. **The default Linux CFS scheduler already
+  places these threads at least as well as manual affinity does, and
+  llama.cpp's poll-based thread sync (`--poll`) appears to interact
+  badly with forced pinning.** Don't hand-pin threads on this build.
+
 Net: the original narrow candidate (reordering + credit-based prefetch)
 is still untested as literally stated and its one attempt (huge pages)
 was killed — but the broader Step 2 goal, beat this baseline by >20%
