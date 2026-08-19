@@ -1,7 +1,18 @@
 # PLAN
 
-Source of truth for the reasoning: [continuous-data-river-critical-analysis.md](continuous-data-river-critical-analysis.md).
+Source documents: [continuous-data-river-original.md](continuous-data-river-original.md)
+(the 39-section concept) and
+[continuous-data-river-critical-analysis.md](continuous-data-river-critical-analysis.md)
+(the critique + extensions — source of truth for what's actually in scope).
 This file is the actionable distillation — update it as steps complete.
+
+## Target hardware
+
+Development happens in whatever sandbox is available; the intended real
+target is a Docker container on a Hetzner server (not set up yet — see
+CLAUDE.md). Every benchmark number produced anywhere else is a smoke test
+of the tooling, not a result to design around. Re-run Step 1 on the actual
+Hetzner box once the container exists.
 
 ## Guiding rule (§V.4 of the analysis)
 

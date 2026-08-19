@@ -6,10 +6,11 @@ that reframe: treating weight loading, caching, and compute as a
 pipelined river of bytes with measurable **resistance**, rather than a
 stack of independent stages tuned in isolation.
 
-This repo starts from a critical analysis of the original "Continuous
-Data River" concept — see
-[docs/continuous-data-river-critical-analysis.md](docs/continuous-data-river-critical-analysis.md)
-for the full write-up (Portuguese). Short version:
+This repo starts from the original "Continuous Data River" concept
+([docs/continuous-data-river-original.md](docs/continuous-data-river-original.md))
+and a critical analysis of it
+([docs/continuous-data-river-critical-analysis.md](docs/continuous-data-river-critical-analysis.md)),
+both in Portuguese. Short version of the analysis:
 
 - Pipelining hides **latency**. It does nothing for **bandwidth**. A
   40 GB model over a 7 GB/s NVMe link is ~0.17 tok/s no matter how
@@ -42,8 +43,10 @@ it. No inference runtime exists yet.
 ## Layout
 
 ```
+CLAUDE.md
 docs/
-  continuous-data-river-critical-analysis.md   the design doc (source of truth)
+  continuous-data-river-original.md            the original concept doc (39 sections)
+  continuous-data-river-critical-analysis.md   critique + extensions (source of truth for scope)
   PLAN.md                                       roadmap / current status
 tools/
   roofline/                                     machine resistance-matrix profiler (C++)

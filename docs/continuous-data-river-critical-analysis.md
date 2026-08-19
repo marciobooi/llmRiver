@@ -1,6 +1,7 @@
 CONTINUOUS DATA RIVER — ANÁLISE CRÍTICA E EXTENSÕES
 ===============================================================
 Documento de trabalho. Complemento ao conceito original.
+Documento original: continuous-data-river-original.md (mesma pasta).
 
 
 ÍNDICE
