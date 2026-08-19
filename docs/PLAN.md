@@ -230,16 +230,91 @@ Three more directions tried, none beat Attempts 2/3:
   llama.cpp's poll-based thread sync (`--poll`) appears to interact
   badly with forced pinning.** Don't hand-pin threads on this build.
 
-Net: the original narrow candidate (reordering + credit-based prefetch)
-is still untested as literally stated and its one attempt (huge pages)
-was killed — but the broader Step 2 goal, beat this baseline by >20%
-using an idea this project's own analysis actually predicts, has now
-been hit twice, by two different mechanisms, each with a disclosed cost
-(quantization: accuracy; speculative decoding: inconsistent, content-
-dependent gain, plus the extra complexity/memory of running two
-models). Neither is "free" the way the killed hugepage attempt would
-have been if it had worked — matching §V.1's own framing: bytes are
-expensive, and these two both pay for speed with something real.
+**Attempt 6 — batching: 3.7x, the largest win found, and it reframes
+everything above.** Full writeup:
+[docs/reports/batching-and-the-roofline-crossover-2026-08-19.md](reports/batching-and-the-roofline-crossover-2026-08-19.md).
+Aggregate decode throughput, Q4_K_M, by parallel sequence count:
+9.08 (B=1) -> 25.13 (B=4) -> **33.98 (B=16)** -> 33.81 (B=32) -> 33.89
+(B=64). Dead flat past 16. This is §II.5's impedance transformer
+demonstrated directly — weights are read once per forward pass no matter
+how many sequences share it, so arithmetic intensity goes from ~1 to
+~16 and the workload leaves the bandwidth-bound region entirely. The
+plateau is the Ryzen's AVX2 FMA throughput taking over as the new wall.
+Cost, stated plainly: this is *aggregate* throughput. Per-sequence
+latency at B=16 is ~2.1 tok/s, far worse than a lone request's 9.08.
+Batching serves many users well; it serves one waiting user badly.
+
+**Attempt 7 — the regime inversion (most useful finding of the day).**
+Predicted from Attempt 6 (if B>=4 is compute-bound, then Q3_K_M's
+cheaper bytes should stop paying and its pricier dequant should start
+costing) and confirmed:
+
+| batch | Q4_K_M | Q3_K_M | winner |
+|---|---|---|---|
+| 1 | 9.08 | **10.94** | Q3_K_M +20% |
+| 4 | **25.13** | 20.71 | Q4_K_M +21% |
+| 16 | **33.98** | 23.44 | Q4_K_M +45% |
+
+Attempt 2's headline (+21.6% from Q3_K_M) holds *only* at batch=1. At
+batch 16 the same choice is 45% slower. The margin grows with batch
+size. This also retroactively explains a detail visible in every earlier
+test but not interpreted at the time: Q3_K_M's prompt processing was
+always slower (41.6 vs 27.0 tok/s here; 38.8 vs 26.9 in the earlier
+llama-cli runs) — prompt processing is inherently batched, so it was
+compute-bound all along, and Q3_K_M was never winning there. One roofline
+model now explains every measurement in this session.
+
+**Attempt 8 — n-gram speculative decoding (no draft model): no gain on
+novel text.** `--spec-type ngram-simple` / `ngram-cache` / `ngram-mod`,
+no draft model needed at all. On the standard technical prompt: 9.1 /
+8.6 / 9.1 tok/s vs. 9.0 baseline — noise, with ngram-cache slightly
+negative. Expected: n-gram speculation works by matching against text
+already in context, and a short prompt generating novel prose has
+nothing to match. Untested and still promising: copy-heavy workloads
+(refactoring, rewriting, summarization) where output largely reproduces
+input — a prompt for that is staged at `~/llmriver/prompts/refactor.txt`
+on the host but the comparison was not run.
+
+**Hardware ceiling, now established definitively.** RAM is 2x32GB
+DDR4-3200, both channels populated, running at full rated 3200 MT/s
+(`dmidecode`). Theoretical peak 51.2 GB/s vs. 44 GB/s measured in Step 1
+= 86% efficiency, which is normal. **There is no memory configuration
+headroom left on this host** — the 44 GB/s wall is final, and combined
+with the firmware-locked 3.6GHz CPU ceiling (Attempt 5), the hardware is
+fully characterized and fully exploited.
+
+## Step 2 — net conclusion
+
+The broader goal (beat the baseline by >20% using ideas this project's
+own analysis predicts) has been hit three times, by three mechanisms,
+each with a disclosed cost:
+
+| mechanism | gain | cost | regime |
+|---|---|---|---|
+| batching (B=16) | **+274%** (9.08 -> 33.98 agg.) | per-sequence latency collapses to ~2.1 tok/s | serving many users |
+| speculative decoding | +45% technical / +10% creative | second model in RAM; gain is content-dependent | single user |
+| Q3_K_M quantization | +20% | model quality, **and it inverts to -45% when batched** | single user only |
+
+The single most important thing learned: **these are not independent
+knobs, and they do not stack.** Q3_K_M + speculative decoding is worse
+than either alone (Attempt 4). Q3_K_M's win reverses entirely under
+batching (Attempt 7). Which optimization is correct depends on which
+side of the roofline crossover the workload sits, and applying a
+bandwidth-bound fix to a compute-bound workload actively costs
+performance.
+
+This sharply bounds the original candidate claim (compute-aware weight
+reordering + credit-based prefetch, >20%). That claim targets the
+bandwidth-bound region — but that region is only single-stream decode,
+and llama.cpp is already at ~97% of its physical ceiling there
+(9.15 of ~9.4 tok/s). Anything that amortizes weight reads moves the
+system out of that region, where bandwidth optimizations have nothing
+left to optimize. **The idea is not dead, but its maximum possible
+payoff on this host is ~3%, in the one case (batch=1) where the two
+larger wins are unavailable or unwanted.** §V.4's instruction was to
+pick a falsifiable claim and try to kill it in a week rather than a
+year; this one is not killed, but it is now known to be worth far less
+than the roadmap assumed, which is the same kind of saving.
 
 ## Deliberately deferred / rejected (see analysis Part I.4 for why)
 
