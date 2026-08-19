@@ -80,15 +80,62 @@ bytes-per-pass grows with batch size instead of staying flat.
 Its lead therefore shrinks — 2.05x at batch 1, 1.34x at batch 16 — but
 it is still the fastest option at every batch size tested.
 
+## Quantizing the MoE: the bandwidth model holds, then bends
+
+The MoE at batch=1 sits at ~100% of its own bandwidth ceiling
+(44 GB/s / 2.38 GB per token = 18.5 predicted, 18.66 measured), so it is
+still bandwidth-bound and smaller quants should still pay. They do, but
+with visibly decaying efficiency as dequantization cost grows:
+
+| quant | file size | decode tok/s | pure-bandwidth prediction | achieved |
+|---|---|---|---|---|
+| Q4_K_M | 18.56 GB | 18.66 | (reference) | 100% |
+| Q3_K_M | 14.71 GB | 20.8 | 23.5 | 88% |
+| Q2_K | 11.26 GB | **25.7** | 30.8 | 83% |
+
+Every step down buys real speed and gives back a slice of it to unpacking
+work. Prompt processing — always compute-bound — degrades outright:
+62.5 (Q4_K_M) -> 43.0 (Q3_K_M) tok/s.
+
+**Q2_K output quality was checked, not assumed.** Asked for a merge-sorted
+-lists function with complexity analysis, it produced correct code with a
+proper docstring, correct two-pointer logic, and sensible comments. A 30B
+model at Q2_K remains clearly usable.
+
+## The inversion appears a third time
+
+Batching the Q2_K MoE against the Q4_K_M MoE:
+
+| batch | MoE Q4_K_M | MoE Q2_K | winner |
+|---|---|---|---|
+| 1 | 18.66 | **25.60** | Q2_K, +37% |
+| 4 | 33.27 | **37.01** | Q2_K, +11% |
+| 16 | **45.53** | 42.56 | Q4_K_M, +7% |
+
+The crossover lands between batch 4 and batch 16. This is the same
+regime law observed twice before — dense Q3_K_M vs Q4_K_M, and
+speculation helping dense while hurting MoE. Three independent
+confirmations:
+
+> Smaller quantization wins while bandwidth-bound and loses once
+> compute-bound. Anything that amortizes weight reads across tokens
+> (batching, speculation) moves you toward compute-bound and can flip
+> the sign of a quantization decision.
+
 ## Best configurations found
 
 | use case | configuration | tok/s | vs. session baseline |
 |---|---|---|---|
-| single user, lowest latency | MoE 30B, no speculation | **18.66** | 2.05x |
-| many concurrent users | MoE 30B at batch 16 | **45.53** | 5.02x |
+| single user, max speed | MoE 30B **Q2_K**, no speculation | **25.7** | **2.83x** |
+| single user, balanced | MoE 30B Q3_K_M, no speculation | 20.8 | 2.29x |
+| single user, best quality | MoE 30B Q4_K_M, no speculation | 18.66 | 2.05x |
+| many concurrent users | MoE 30B **Q4_K_M** at batch 16 | **45.53** | **5.02x** |
 
 Session baseline = dense Qwen2.5-7B Q4_K_M, tuned, single stream
 (9.08 tok/s).
+
+Note that the best quantization for one user is *not* the best for many
+— Q2_K wins at batch 1 by 37% and loses at batch 16 by 7%.
 
 Explicitly **not** recommended with MoE: speculative decoding (hurts),
 and do not assume the dense model's tuning transfers.

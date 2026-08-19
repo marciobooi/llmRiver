@@ -402,6 +402,7 @@ own analysis predicts) has been hit repeatedly. Ranked by size:
 | mechanism | gain | cost | regime |
 |---|---|---|---|
 | **MoE + batching** | **+402%** (9.08 -> 45.53 agg.) | per-sequence latency; 18.6GB RAM | serving many users |
+| **MoE + Q2_K quant** | **+183%** (9.08 -> 25.7) | quality (verified still coherent); loses when batched | single user |
 | **MoE architecture** | **+105%** (9.08 -> 18.66) | 18.6GB RAM resident; **breaks speculation** | single user |
 | batching (dense, B=16) | +274% (9.08 -> 33.98 agg.) | per-sequence latency collapses to ~2.1 tok/s | serving many users |
 | speculative decoding | +45% technical / +10% creative | second model in RAM; content-dependent; **negative on MoE** | dense, single user |
