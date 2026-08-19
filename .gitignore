@@ -1,0 +1,4 @@
+build/
+*.o
+*.bin
+roofline_disk_test.bin
