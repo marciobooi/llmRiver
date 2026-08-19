@@ -519,6 +519,40 @@ That is the same conclusion Attempt 11 reached for the bandwidth regime,
 arrived at independently: on fully-characterized hardware, the remaining
 wins are in model architecture, not systems tuning.
 
+**Attempt 16 — architecture comparison: sliding-window attention nearly
+eliminates context degradation.** Attempt 15 concluded the long-context
+wall is attention compute, and that the fixes are architectural. Tested
+directly, same axis for every model (`llama-bench -n 64 -d 0,4096`,
+`-t 6 -fa 1`, llama.cpp b10502):
+
+| model | architecture | depth 0 | depth 4096 | drop |
+|---|---|---|---|---|
+| Gemma 3 12B | **sliding-window attn** | 4.97 | 4.58 | **-7.8%** |
+| dense Qwen2.5-7B | full attn | 9.30 | 7.24 | -22% |
+| Qwen3-30B-A3B Q4_K_M | MoE, full attn, 48 layers | 19.58 | 9.20 | -53% |
+| Qwen3-30B-A3B Q2_K | MoE, full attn, 48 layers | 26.77 | 10.25 | -62% |
+
+**Sliding-window attention works exactly as the mechanism predicts** —
+Gemma 3 barely notices 4K of context (-7.8%) because its per-token
+attention cost is capped by the window rather than growing with
+conversation length. This is a clean confirmation of Attempt 15's
+diagnosis: the long-context cost really is attention work, and bounding
+that work bounds the degradation.
+
+**But it does not win at 4K.** Gemma 3 is a dense 12B (7.3GB), so its
+*baseline* is bandwidth-limited and slow (4.97 tok/s, near the 6.0 tok/s
+its size implies at 44 GB/s). At depth 4096 the MoE is still more than
+twice as fast in absolute terms (10.25 vs 4.58). Flat-but-slow loses to
+steep-but-fast until the curves cross; where they cross is the number
+that decides which model to actually deploy, and is being measured at
+8K/16K.
+
+Note this is a comparison of *architectures as shipped*, not a
+controlled experiment — Gemma 3 12B differs from Qwen3-30B-A3B in
+parameter count, density, layer count and training, not only in
+attention scheme. The degradation *slopes* are the meaningful signal;
+the absolute values confound several variables.
+
 ## Step 2 — net conclusion
 
 The broader goal (beat the baseline by >20% using ideas this project's
