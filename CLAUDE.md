@@ -52,13 +52,20 @@ becomes undeliverable. Don't drift into it.
 ## Target hardware
 
 The eventual real target is a Docker container running on a Hetzner
-server — not set up yet as of this writing. Until that exists, all
-benchmark numbers are produced on whatever sandbox is available and are
-**smoke tests of the tooling, not results to design around**. Any code
-that hardcodes assumptions from a dev sandbox's hardware (core count,
-cache sizes, NUMA topology) is a bug. When the Hetzner/Docker setup
-lands, document it in this file and in docs/PLAN.md, and re-run Step 1
-there before trusting any number.
+server. The host is reachable now:
+
+```
+ssh -i ~/.ssh/mercury_admin mercury@65.109.96.74
+```
+
+The `tools/roofline` Docker image now builds and runs on that host,
+isolated from its other stacks (mercury/glitchtip/supabase) — see
+`tools/roofline/README.md`'s "Run in Docker" section for the exact
+commands and docs/PLAN.md's "Target hardware" / Step 1 sections for the
+first real report. Any code that hardcodes assumptions from a dev
+sandbox's hardware (core count, cache sizes, NUMA topology) is still a
+bug — the host's own numbers (AMD Ryzen 5 3600, no AVX-512) are just as
+easy to over-fit to as a VM's.
 
 ## Stack / working conventions
 

@@ -1,0 +1,24 @@
+diff --git a/src/llama-mmap.cpp b/src/llama-mmap.cpp
+index ed572da..470fc3d 100644
+--- a/src/llama-mmap.cpp
++++ b/src/llama-mmap.cpp
+@@ -459,6 +459,19 @@ struct llama_mmap::impl {
+             throw std::runtime_error(format("mmap failed: %s", strerror(errno)));
+         }
+ 
++#ifdef __linux__
++        // llmriver: this host's THP mode is "madvise" (opt-in), and
++        // docs/reports/hetzner-mercury-2026-08-19.json measured a 14.9%
++        // pointer-chase latency reduction from 2MB pages on this exact
++        // machine (Step 1 roofline, hugepage bench). The mmap'd weight
++        // file otherwise stays on 4KB pages: more TLB pressure, and the
++        // L2 streaming prefetcher re-arms at every 4KB boundary instead
++        // of running free across a 2MB span (critical-analysis §III.3.1).
++        if (madvise(addr, file->size(), MADV_HUGEPAGE)) {
++            LLAMA_LOG_WARN("warning: madvise(.., MADV_HUGEPAGE) failed: %s\n", strerror(errno));
++        }
++#endif
++
+         if (prefetch > 0) {
+             if (posix_madvise(addr, std::min(file->size(), prefetch), POSIX_MADV_WILLNEED)) {
+                 LLAMA_LOG_WARN("warning: posix_madvise(.., POSIX_MADV_WILLNEED) failed: %s\n",

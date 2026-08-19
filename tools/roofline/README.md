@@ -32,6 +32,34 @@ target box.
 Subcommands: `all`, `ram`, `latency`, `disk`, `compute`, `hugepage`.
 Run with no arguments for the full flag list.
 
+## Run in Docker (target hardware)
+
+The image must be built **on** the machine being profiled — `-march=native`
+is resolved at `docker build` time, so an image built elsewhere reports
+someone else's CPU. Build context is this directory:
+
+```
+docker build -t llmriver-roofline:latest .
+```
+
+Run it isolated from anything else on the host: no network, a dedicated
+container name, and bind mounts only for the report output and the
+disk-bench test file (so `disk` hits the real filesystem, not the
+container's overlay layer):
+
+```
+mkdir -p ~/llmriver/reports ~/llmriver/diskbench
+docker run --rm --network none --name llmriver-roofline \
+  -v ~/llmriver/reports:/reports \
+  -v ~/llmriver/diskbench:/diskbench \
+  llmriver-roofline:latest \
+  all --json --out=/reports/report.json --disk-file=/diskbench/test.bin
+```
+
+`--rm` and no exposed ports mean it never lingers as a service — it's a
+one-shot CLI run, not a daemon, so it can't contend with or interfere
+with anything else running on the host.
+
 ## What each part measures, and why
 
 - **ram** — sequential streaming read/write/write-non-temporal bandwidth,
