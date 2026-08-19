@@ -1,0 +1,16 @@
+=== MoE-Q4_K_M ===
+"n_depth": 0
+"avg_ts": 19.580963
+"n_depth": 4096
+"avg_ts": 9.200004
+=== MoE-Q2_K ===
+"n_depth": 0
+"avg_ts": 26.766147
+"n_depth": 4096
+"avg_ts": 10.250258
+=== dense-7B ===
+"n_depth": 0
+"avg_ts": 9.295902
+"n_depth": 4096
+"avg_ts": 7.242990
+ALLDONE

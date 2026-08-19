@@ -122,7 +122,40 @@ confirmations:
 > (batching, speculation) moves you toward compute-bound and can flip
 > the sign of a quantization decision.
 
+## IMPORTANT CAVEAT: every number above uses a 64-token prompt
+
+Decode speed measured at KV depth 0 vs. depth 4096 (`llama-bench
+-n 64 -d 0,4096`):
+
+| model | depth 0 | depth 4096 | drop |
+|---|---|---|---|
+| MoE 30B Q2_K | 26.77 | 10.25 | **-62%** |
+| MoE 30B Q4_K_M | 19.58 | 9.20 | **-53%** |
+| dense 7B Q4_K_M | 9.30 | 7.24 | -22% |
+
+**The MoE advantage collapses from 2.88x to 1.42x once there is real
+context in the KV cache.** It still wins, and the Q2_K-over-Q4_K_M
+ordering still holds, but "2.8x faster" is a short-prompt number and
+should not be quoted for chat-with-history or RAG workloads.
+
+Mechanism (inferred, consistent with the architecture rather than
+directly instrumented): expert sparsity applies to the FFN weights only.
+Attention and the KV cache are dense — every token attends over all
+previous tokens no matter which experts route. Qwen3-30B-A3B has 48
+layers against the dense 7B's 28, so as context grows and attention work
+comes to dominate the per-token cost, the MoE's sparse-FFN advantage
+stops mattering while its deeper attention stack becomes a liability.
+
+Practical consequence: the longer your typical prompt, the weaker the
+case for the MoE. At 4K context a user sees ~10 tok/s, not ~26. This
+was not measured beyond 4096 tokens; the trend suggests the advantage
+continues to narrow.
+
 ## Best configurations found
+
+All figures below are **short-prompt** (64-token) numbers. See the
+caveat above: expect roughly 10 tok/s, not 26, once ~4K of context is in
+play.
 
 | use case | configuration | tok/s | vs. session baseline |
 |---|---|---|---|
@@ -130,6 +163,7 @@ confirmations:
 | single user, balanced | MoE 30B Q3_K_M, no speculation | 20.8 | 2.29x |
 | single user, best quality | MoE 30B Q4_K_M, no speculation | 18.66 | 2.05x |
 | many concurrent users | MoE 30B **Q4_K_M** at batch 16 | **45.53** | **5.02x** |
+| **long prompts (~4K ctx)** | MoE 30B Q2_K | **10.25** | 1.42x vs dense at same depth |
 
 Session baseline = dense Qwen2.5-7B Q4_K_M, tuned, single stream
 (9.08 tok/s).

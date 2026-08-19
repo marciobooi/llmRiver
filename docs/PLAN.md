@@ -422,6 +422,38 @@ native ternary does not obviously beat K-quants on
 bandwidth-efficiency; its advantage is simply that 1.58 bits is fewer
 bits.
 
+**Attempt 14 — context depth: the MoE win is a short-prompt win.** Every
+number in Attempts 6-13 used a 64-token prompt. Re-measured at KV depth
+4096 (`llama-bench -n 64 -d 0,4096`):
+
+| model | depth 0 | depth 4096 | drop |
+|---|---|---|---|
+| MoE 30B Q2_K | 26.77 | 10.25 | **-62%** |
+| MoE 30B Q4_K_M | 19.58 | 9.20 | -53% |
+| dense 7B Q4_K_M | 9.30 | 7.24 | -22% |
+
+**MoE's lead falls from 2.88x to 1.42x.** It still wins, and the
+Q2_K-over-Q4_K_M ordering is stable, but the dense model degrades far
+more gracefully with context. Mechanism (inferred from architecture, not
+directly instrumented): expert sparsity covers FFN weights only —
+attention and KV cache are dense, since every token attends over all
+prior tokens regardless of routing. Qwen3-30B-A3B has 48 layers vs. the
+dense 7B's 28, so once attention dominates the per-token cost, the
+sparse-FFN advantage stops paying and the deeper attention stack starts
+costing. Not measured past 4096; the trend suggests further narrowing.
+
+This is the most important caveat in this document: **"2.8x faster" is a
+64-token-prompt claim.** A user with real chat history or a RAG context
+sees ~10 tok/s, not ~26.
+
+(Process note: this result was nearly lost three times to output-filter
+bugs in the harness scripts — `grep -v '^\|-'` treats `\|` as alternation
+in BRE and silently discarded every row, and a later `grep 't/s'` matched
+only the table header. Both produced *empty* output rather than an error.
+The benchmarks had run correctly both times. Filter failures that look
+like "no results" rather than "error" are a live hazard for this kind of
+measurement work — check for empty output explicitly.)
+
 ## Step 2 — net conclusion
 
 The broader goal (beat the baseline by >20% using ideas this project's
@@ -442,6 +474,12 @@ better model.** Sparsity was the only technique tested that reduced
 bytes-per-token rather than rearranging or amortizing them — which is
 exactly what §I.3 predicted and what §I.2's bandwidth argument implies
 is the only real escape.
+
+**But read Attempt 14 before quoting any of these numbers.** They are
+all 64-token-prompt figures. At 4K of context the MoE's advantage drops
+from 2.88x to 1.42x and absolute speed falls to ~10 tok/s, because
+sparsity does not apply to attention or the KV cache. The gains are
+real; their size is workload-dependent.
 
 The single most important thing learned: **these are not independent
 knobs, and they do not stack.** Q3_K_M + speculative decoding is worse
