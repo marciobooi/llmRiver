@@ -81,6 +81,28 @@ roofline's measured RAM bandwidth predicts for this model size — see
 docs/PLAN.md Step 2 for the full baseline writeup and what would
 actually need to change to beat it.
 
+## Running it as an API
+
+`serve.sh` starts the winning config as an OpenAI-compatible HTTP server:
+
+```
+./serve.sh single    # 25.7 tok/s, one user at a time (MoE Q2_K)
+./serve.sh serving   # 45.5 tok/s aggregate, 16 concurrent (MoE Q4_K_M)
+docker rm -f llmriver-server   # stop it
+```
+
+Needs the `llmriver-llamacpp:b10499-server` image (the `llama-server`
+target isn't in the base Dockerfile's target list; see `serve.sh`).
+
+**It binds to 127.0.0.1 on purpose.** This host has a public IP and
+`llama-server` ships no authentication — publishing it on 0.0.0.0 would
+put an open LLM endpoint on the internet. Reach it from your laptop with
+a tunnel instead:
+
+```
+ssh -i ~/.ssh/mercury_admin -L 8080:127.0.0.1:8080 mercury@65.109.96.74
+```
+
 ## Fastest known configurations on this host
 
 Use these unless you have a reason not to. Full reasoning in

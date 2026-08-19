@@ -394,6 +394,34 @@ explicitly, not just pointer-chase latency. (§III.3.1 calls TLB "a
 barreira mais subestimada"; for *streaming* weight reads on this host,
 it is measurably not a barrier at all.)
 
+**Attempt 13 — native ternary (BitNet b1.58): fast, but the available
+GGUF is broken.** The logical endpoint of the bytes-per-token argument:
+a model *trained* at ~1.58 bits rather than compressed afterward, which
+should avoid the dequantization penalty that ate ~17% of the Q2_K gain.
+
+Microsoft's official `bitnet-b1.58-2B-4T-gguf` ships in `i2_s` format,
+which stock llama.cpp does not support (it needs their bitnet.cpp fork);
+our build supports llama.cpp's own ternary types `TQ1_0`/`TQ2_0`. Used a
+community TQ2_0 conversion (`Synapticode/bitnet-b1.58-2B-4T-tq2_0-gguf`,
+1.20GB).
+
+Speed: **31.9 tok/s decode, 133.6 tok/s prompt** — the fastest decode
+measured in this project (3.5x the dense baseline). Quality: **unusable**
+— degenerate repetition loops on every prompt tried, both greedy with
+`--ignore-eos` and with normal sampling (`--temp 0.7 --repeat-penalty
+1.1`); asked for a Python function it never emits code, just repeats
+"Yes, I can provide you with a Python function..." indefinitely. Almost
+certainly the community conversion rather than the architecture, but not
+worth further pursuit here.
+
+Note the efficiency figure, which is the actually interesting part:
+1.20GB at 44 GB/s predicts 36.7 tok/s, achieved 31.9 = **87%** — about
+the same as Q3_K_M's 88% and better than Q2_K's 83%, but *not* the
+dramatic dequant-free win the ternary premise suggests. On this evidence
+native ternary does not obviously beat K-quants on
+bandwidth-efficiency; its advantage is simply that 1.58 bits is fewer
+bits.
+
 ## Step 2 — net conclusion
 
 The broader goal (beat the baseline by >20% using ideas this project's
