@@ -47,6 +47,10 @@ time.
 | Qwen2.5-7B-Instruct Q4_K_M | `~/llmriver/models/qwen2.5-7b-instruct-q4_k_m/` | shard1 `dfce12e3...0580db` / shard2 `539cf93f...df3d72a` |
 | Qwen2.5-7B-Instruct Q3_K_M | `~/llmriver/models/qwen2.5-7b-instruct-q3_k_m/` | `a96b1617...21cca5e` |
 | Qwen2.5-0.5B-Instruct Q8_0 (speculative-decoding draft) | `~/llmriver/models/qwen2.5-0.5b-instruct-q8_0/` | `ca59ca7f...9ff76844e` |
+| Qwen2.5-7B-Instruct Q4_0 | `~/llmriver/models/qwen2.5-7b-instruct-q4_0/` | 2 shards |
+| Qwen2.5-0.5B-Instruct Q4_K_M (faster draft) | `~/llmriver/models/qwen2.5-0.5b-instruct-q4_k_m/` | — |
+| **Qwen3-30B-A3B-Instruct-2507 Q4_K_M (MoE — fastest)** | `~/llmriver/models/qwen3-30b-a3b-q4km/` | `6c997b8a...6c4774d0` (verified) |
+| Qwen3-0.6B Q8_0 (MoE draft — **not recommended**, see below) | `~/llmriver/models/qwen3-0.6b-q8/` | — |
 
 Source: `Qwen/Qwen2.5-7B-Instruct-GGUF` / `Qwen/Qwen2.5-0.5B-Instruct-GGUF`
 on Hugging Face. Q4_K_M is split into two `gguf-split`-convention shards
@@ -76,6 +80,29 @@ This tuned number is already ~97% of the ~9.4 tok/s ceiling the
 roofline's measured RAM bandwidth predicts for this model size — see
 docs/PLAN.md Step 2 for the full baseline writeup and what would
 actually need to change to beat it.
+
+## Fastest known configurations on this host
+
+Use these unless you have a reason not to. Full reasoning in
+docs/PLAN.md Step 2 and
+[docs/reports/moe-sparsity-the-real-unlock-2026-08-19.md](../../docs/reports/moe-sparsity-the-real-unlock-2026-08-19.md).
+
+**Single user (18.7 tok/s, 2.05x the dense-7B baseline):**
+
+```
+docker run --rm --network none \
+  -v ~/llmriver/models/qwen3-30b-a3b-q4km:/moe:ro \
+  --entrypoint llama-cli llmriver-llamacpp:b10499 \
+  -m /moe/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf \
+  -st -t 6 -fa 1 -n 128 -p 'your prompt'
+```
+
+**Many concurrent users (45.5 tok/s aggregate, 5.0x baseline):** same
+model, served with 16 parallel slots.
+
+Do **not** add a draft model (`-md`) to the MoE — speculation makes it
+*slower* (18.5 -> 10.0 as draft depth grows). Speculation only helps the
+dense models here.
 
 ## What actually beat the baseline
 
