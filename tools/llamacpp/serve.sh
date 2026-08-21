@@ -23,6 +23,7 @@ case "$MODE" in
     # reasoning model that spends tokens thinking before answering.
     MODEL_DIR=~/llmriver/models/lfm25-8b
     MODEL_FILE=LFM2.5-8B-A1B-Q4_K_M.gguf
+    MODEL_URL='https://huggingface.co/LiquidAI/LFM2.5-8B-A1B-GGUF/resolve/main/LFM2.5-8B-A1B-Q4_K_M.gguf'
     PARALLEL=1
     CTX=32768
     ;;
@@ -33,24 +34,17 @@ case "$MODE" in
     # Q3_K_M buys most of the speed for none of the measurable quality.
     MODEL_DIR=~/llmriver/models/qwen3-30b-q3km
     MODEL_FILE=Qwen3-30B-A3B-Instruct-2507-Q3_K_M.gguf
-    PARALLEL=1
-    CTX=8192
-    ;;
-  fastest)
-    # 25.7 tok/s, the fastest single-user config measured — but +9.5%
-    # perplexity against Q4_K_M, which IS statistically distinguishable.
-    # Use when speed matters more than output quality.
-    MODEL_DIR=~/llmriver/models/qwen3-30b-q2k
-    MODEL_FILE=Qwen3-30B-A3B-Instruct-2507-Q2_K.gguf
+    MODEL_URL='https://huggingface.co/unsloth/Qwen3-30B-A3B-Instruct-2507-GGUF/resolve/main/Qwen3-30B-A3B-Instruct-2507-Q3_K_M.gguf'
     PARALLEL=1
     CTX=8192
     ;;
   longctx)
-    # For prompts beyond ~13K tokens. DeepSeek-V2-Lite (MoE + MLA) measured
-    # fastest at both 4K (12.2 tok/s) and 16K (3.8) because MLA keeps
-    # attention cost down, which is the binding constraint at depth.
+    # For prompts beyond ~13K tokens IF you prefer a 30B-class model there.
+    # DeepSeek-V2-Lite (MoE + MLA) measured 12.2 tok/s at 4K and 3.8 at 16K.
+    # Note 'speed' beats it at every depth (29.8 / 14.4) with a smaller model.
     MODEL_DIR=~/llmriver/models/deepseek-v2-lite
     MODEL_FILE=DeepSeek-V2-Lite-Chat-Q4_K_M.gguf
+    MODEL_URL='https://huggingface.co/second-state/DeepSeek-V2-Lite-Chat-GGUF/resolve/main/DeepSeek-V2-Lite-Chat-Q4_K_M.gguf'
     PARALLEL=1
     CTX=32768
     ;;
@@ -61,14 +55,29 @@ case "$MODE" in
     # this batch size). Better quality too.
     MODEL_DIR=~/llmriver/models/qwen3-30b-a3b-q4km
     MODEL_FILE=Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf
+    MODEL_URL='https://huggingface.co/unsloth/Qwen3-30B-A3B-Instruct-2507-GGUF/resolve/main/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf'
     PARALLEL=16
     CTX=65536
     ;;
   *)
-    echo "usage: $0 [speed|single|fastest|longctx|serving]" >&2
+    echo "usage: $0 [speed|single|longctx|serving]" >&2
+    echo "  speed   LFM2.5-8B-A1B  - fastest at every depth (35/30/14 tok/s)" >&2
+    echo "  single  Qwen3-30B Q3_K_M - best quality (20.8 tok/s)" >&2
+    echo "  longctx DeepSeek-V2-Lite - 30B-class with MLA (needs download)" >&2
+    echo "  serving Qwen3-30B Q4_K_M - 16 concurrent (needs download)" >&2
     exit 1
     ;;
 esac
+
+# Only 'speed' and 'single' models are kept on disk; the rest were deleted to
+# reclaim ~107GB. Fail with the URL rather than a cryptic docker mount error.
+if [ ! -f "${MODEL_DIR/#\~/$HOME}/$MODEL_FILE" ]; then
+  echo "model not present: $MODEL_DIR/$MODEL_FILE" >&2
+  echo "download it with:" >&2
+  echo "  mkdir -p $MODEL_DIR && curl -L --retry 5 -o $MODEL_DIR/$MODEL_FILE \\" >&2
+  echo "    '${MODEL_URL:-see docs/reports/architecture-comparison-2026-08-19.md}'" >&2
+  exit 1
+fi
 
 # No draft model on purpose: speculative decoding makes this MoE *slower*
 # (18.5 -> 10.0 tok/s as draft depth grows), because verifying N draft tokens
