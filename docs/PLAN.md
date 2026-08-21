@@ -691,6 +691,36 @@ tokenizers), so no quantitative quality ranking exists. Expect the 30B
 to be stronger on hard reasoning. It is also a *reasoning* model that
 emits a thinking phase, so tok/s overstates time-to-answer.
 
+**Attempt 23 — LFM2.5-2.6B: prediction validated, vendor claim not
+reproduced, and the smaller model loses.** LiquidAI advertises 113 tok/s
+for LFM2.5-2.6B on "an AMD Ryzen CPU" in under 2.5 GB.
+
+Predicted before measuring, from this host's 44 GB/s and the 1.67 GB
+Q4_K_M file: **26.3 tok/s**. Measured: **23.56** — within 10%. The
+bandwidth model continues to predict well.
+
+| depth | LFM2.5-8B-A1B | LFM2.5-2.6B |
+|---|---|---|
+| 0 | **35.16** | 23.56 |
+| 4,096 | **29.78** | 19.66 |
+| 16,384 | **14.39** | 11.57 |
+
+Two conclusions:
+
+1. **The 113 tok/s claim does not hold here (23.6 measured, 4.8x lower)
+   and cannot on this class of machine.** 113 tok/s x 1.67 GB/token
+   requires 189 GB/s of memory bandwidth; dual-channel DDR5-6000 peaks
+   near 96 GB/s and this host's DDR4-3200 measures 44. The vendor figure
+   must come from different hardware, a smaller quant, or a different
+   measurement basis. Vendor tok/s numbers do not transfer between
+   memory systems — recompute them against the target's measured
+   bandwidth before believing them.
+2. **The 8B model beats the 2.6B model at every depth**, because
+   LFM2.5-8B-A1B is MoE with ~1B active (1.25 GB read/token) while
+   LFM2.5-2.6B is dense (1.67 GB/token). A 3x larger model reads 25%
+   fewer bytes. This is §I.3 again: parameter count does not set decode
+   speed; bytes moved per token does.
+
 ## Step 2 — net conclusion
 
 The broader goal (beat the baseline by >20% using ideas this project's
