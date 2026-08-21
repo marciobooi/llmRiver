@@ -85,7 +85,7 @@ fi
 exec docker run -d --name llmriver-server \
   -p 127.0.0.1:8080:8080 \
   -v "$MODEL_DIR":/moe:ro \
-  --entrypoint llama-server llmriver-llamacpp:b10499-server \
+  --entrypoint llama-server llmriver-llamacpp:b10502-ppl \
   -m /moe/"$MODEL_FILE" \
   --host 0.0.0.0 --port 8080 \
   -t 6 -fa 1 -c "$CTX" --parallel "$PARALLEL"
