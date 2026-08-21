@@ -14,6 +14,18 @@ set -euo pipefail
 MODE="${1:-single}"
 
 case "$MODE" in
+  speed)
+    # 35.2 tok/s short, 29.8 at 4K, 14.4 at 16K -- fastest at every depth
+    # measured (docs/reports/architecture-comparison-2026-08-19.md).
+    # ~1B active params of 8B, so only ~1.25 GB is read per token, plus
+    # hybrid conv/attention keeps long-context cost down. Trade-off: it is
+    # an 8B model, weaker than the 30B MoEs on hard reasoning, and it is a
+    # reasoning model that spends tokens thinking before answering.
+    MODEL_DIR=~/llmriver/models/lfm25-8b
+    MODEL_FILE=LFM2.5-8B-A1B-Q4_K_M.gguf
+    PARALLEL=1
+    CTX=32768
+    ;;
   single)
     # 20.8 tok/s. Q3_K_M rather than Q2_K: measured wikitext perplexity is
     # 8.29 vs Q4_K_M's 8.04 (+3.1%, error bars overlap, i.e. no detectable
@@ -53,7 +65,7 @@ case "$MODE" in
     CTX=65536
     ;;
   *)
-    echo "usage: $0 [single|fastest|longctx|serving]" >&2
+    echo "usage: $0 [speed|single|fastest|longctx|serving]" >&2
     exit 1
     ;;
 esac

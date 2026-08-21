@@ -86,19 +86,22 @@ actually need to change to beat it.
 There is no single fastest model here. Measured decode tok/s by KV depth
 (`-t 6 -fa 1`, llama.cpp b10502):
 
-| depth | MoE 30B Q2_K | Gemma 3 12B (sliding-window) |
-|---|---|---|
-| 0 | **26.77** | 4.97 |
-| 4,096 | **10.25** | 4.58 |
-| 8,192 | **6.25** | 3.81 |
-| 16,384 | 2.34 | **3.12** |
+| depth | **LFM2.5-8B-A1B** | Qwen3-30B Q2_K | DeepSeek-V2-Lite | Gemma 3 12B |
+|---|---|---|---|---|
+| 0 | **35.16** | 26.77 | 21.16 | 4.97 |
+| 4,096 | **29.78** | 10.25 | 12.22 | 4.58 |
+| 16,384 | **14.39** | 2.34 | 3.76 | 3.12 |
 
-- **Short prompts / most chat turns:** MoE 30B Q2_K, by up to 5.4x.
-- **Past ~12-13K tokens of context:** Gemma 3 12B. The MoE decays -91%
-  across this range against Gemma 3's -37%, because expert sparsity does
-  not apply to attention and the MoE carries 48 attention layers.
-- **Past ~16K:** everything on this host is 2-3 tok/s. That is below
-  comfortable interactive speed no matter which model you pick.
+- **Fastest at every depth: LFM2.5-8B-A1B** (`serve.sh speed`). ~1B
+  active parameters of 8B means only ~1.25 GB is read per token, and its
+  hybrid conv/attention keeps long-context cost down. It is the only
+  model here that stays usable past 16K.
+- **Best quality:** the 30B MoEs (`serve.sh single`). They are stronger
+  models but pay heavily with context — Qwen3-30B decays -91% from 0 to
+  16K, because expert sparsity does not apply to attention and it
+  carries 48 attention layers.
+- Quality was **not** ranked across families (different tokenizers make
+  perplexity incomparable). Evaluate on your own task before switching.
 
 ## Running it as an API
 

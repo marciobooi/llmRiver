@@ -659,6 +659,38 @@ wants MLA/sliding-window). This is §I.5's "measurement and control
 layer" doing the job it was proposed for: deciding what to run from
 measurements rather than assumption.
 
+**Attempt 22 — hybrid architectures close the study, and win outright.**
+Final family: small-active MoE with hybrid attention, and a Mamba2
+hybrid.
+
+| model | architecture | 0 | 4,096 | 16,384 | decay |
+|---|---|---|---|---|---|
+| **LFM2.5-8B-A1B** | **MoE 1B-active + conv/attn hybrid** | **35.16** | **29.78** | **14.39** | -59% |
+| Granite 4.0-H small | Mamba2 + attn hybrid | 6.28 | 6.08 | 4.57 | **-27%** |
+
+**LFM2.5-8B-A1B is fastest at every depth measured** — 1.3x the best
+short-prompt number, 2.4x the best 4K number, **3.8x** the best 16K
+number — and is the only model tested that stays comfortably usable at
+long context (14.4 tok/s where everything else sits at 2-4.6).
+
+It wins by pushing both properties harder than DeepSeek did: ~1B active
+parameters (measured **1.25 GB read/token** from a 4.9 GB file, the
+smallest weight bill in the study) plus hybrid conv/attention instead of
+full attention everywhere.
+
+Granite 4.0-H demonstrates the decay axis in isolation — flattest curve
+of any usable model (-27%) — but a 19 GB file at ~7 GB read/token caps
+it at 6.3 tok/s. Flat-and-slow loses to fast-and-sloped again, within
+this depth range.
+
+**Quality caveat, stated plainly:** LFM2.5 produced correct, coherent
+output on a code task (correct merge implementation and O(n+m)
+analysis), but it is an 8B/1B-active model against Qwen3-30B-A3B's
+30B/3B. Cross-family perplexity is not comparable (different
+tokenizers), so no quantitative quality ranking exists. Expect the 30B
+to be stronger on hard reasoning. It is also a *reasoning* model that
+emits a thinking phase, so tok/s overstates time-to-answer.
+
 ## Step 2 — net conclusion
 
 The broader goal (beat the baseline by >20% using ideas this project's

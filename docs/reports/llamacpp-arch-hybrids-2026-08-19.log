@@ -1,0 +1,15 @@
+=== LFM2.5-8B-A1B-hybrid ===
+"n_depth": 0
+"avg_ts": 35.157453
+"n_depth": 4096
+"avg_ts": 29.778280
+"n_depth": 16384
+"avg_ts": 14.394586
+=== granite-4.0-h-mamba2 ===
+"n_depth": 0
+"avg_ts": 6.283886
+"n_depth": 4096
+"avg_ts": 6.076732
+"n_depth": 16384
+"avg_ts": 4.567613
+ALLDONE
